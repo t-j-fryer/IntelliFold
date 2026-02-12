@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
 import torch
 import torch.nn as nn
 import einops
@@ -21,6 +22,22 @@ from intellifold.openfold.model.heads import ConfidenceHead
 from intellifold.openfold.utils.atom_token_conversion import aggregate_fn, aggregate_fn_advanced
 
 from torch.amp import autocast
+
+
+def autocast_for_device(enabled: bool = True, dtype=torch.float32):
+    """Use device-appropriate autocast and safely no-op on unsupported backends."""
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapped(*args, **kwargs):
+            device_type = "cuda" if torch.cuda.is_available() else (
+                "mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() else "cpu"
+            )
+            if device_type == "cpu":
+                return fn(*args, **kwargs)
+            with autocast(device_type=device_type, enabled=enabled, dtype=dtype):
+                return fn(*args, **kwargs)
+        return wrapped
+    return decorator
 
 def exists(v):
     return v is not None
@@ -49,7 +66,7 @@ class IntelliFold(nn.Module):
         self.generator = generator
         self.advanced_conversion = self.globals.advanced_conversion
 
-    @autocast("cuda",enabled=True, dtype=torch.float32)
+    @autocast_for_device(enabled=True, dtype=torch.float32)
     def diffusion_edm_forward(self,x_noisy,t,input_features,s_inputs,s_trunk,z_trunk):
         
         scale_skip = self.diffusion_module.sigma_data ** 2 / (t ** 2 + self.diffusion_module.sigma_data ** 2)
@@ -76,7 +93,7 @@ class IntelliFold(nn.Module):
         return  t
 
     @torch.no_grad()
-    @autocast("cuda",enabled=True, dtype=torch.float32)
+    @autocast_for_device(enabled=True, dtype=torch.float32)
     def sample_diffusion(self,input_features, s_inputs,s_trunk,z_trunk,diffusion_batch_size):
         """
         Args:
@@ -206,7 +223,7 @@ class CentreRandomAugmentation(nn.Module):
         return self.dummy.device
 
     @torch.no_grad()
-    @autocast("cuda",enabled=True, dtype=torch.float32)
+    @autocast_for_device(enabled=True, dtype=torch.float32)
     def forward(
         self,
         x,
