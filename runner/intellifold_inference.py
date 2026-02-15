@@ -1,6 +1,7 @@
 import argparse
 import os
-os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'  ## to avoid memory fragmentation
+if "PYTORCH_CUDA_ALLOC_CONF" not in os.environ:
+    os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'  ## to avoid memory fragmentation
 import gc
 import json
 import traceback
@@ -34,6 +35,14 @@ from intellifold.data.inference.utils import download, get_cache_path
 from intellifold.data.inference.data_tools import check_inputs, compute_msa, process_inputs, check_outputs, compute_similar_sequence
        
 logger = logging.getLogger(__name__)
+
+
+def clear_device_cache(device: torch.device) -> None:
+    """Release backend cache when supported."""
+    if device.type == "cuda" and torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    elif device.type == "mps" and hasattr(torch, "mps") and torch.backends.mps.is_available():
+        torch.mps.empty_cache()
  
 
 def init_logging():
@@ -158,12 +167,19 @@ def main(args):
     set_seed(seeds[0])
      
     # set timeout to 1800000ms, 30 minutes
+    precision = args.precision
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() and precision in {"fp16", "bf16"}:
+        logger.warning(
+            "Accelerate does not support fp16/bf16 mixed_precision on MPS; falling back to --precision no."
+        )
+        precision = "no"
+
     kwargs_handlers = [DistributedDataParallelKwargs(find_unused_parameters=False),
                        InitProcessGroupKwargs(timeout=timedelta(seconds=1800000))]
     accelerator = Accelerator(
         kwargs_handlers=kwargs_handlers, 
-        log_with='wandb', 
-        mixed_precision=args.precision,
+        log_with=None,
+        mixed_precision=precision,
         step_scheduler_with_optimizer=False
         )
     
@@ -289,7 +305,7 @@ def main(args):
     loader = accelerator.prepare(pred_loader)
     for batch_idx, input_features in tqdm(enumerate(loader), total=len(loader), disable= not accelerator.is_local_main_process, desc=f"Predicting"):      
             
-        torch.cuda.empty_cache()
+        clear_device_cache(accelerator.device)
         
         try:
             record = input_features.pop("record")[0]
@@ -314,7 +330,7 @@ def main(args):
                 f.write(target_msg)
             del input_features
             gc.collect()
-            torch.cuda.empty_cache()
+            clear_device_cache(accelerator.device)
             continue
           
         seed_completion = 0    
@@ -325,7 +341,7 @@ def main(args):
             #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # DO THE FORWARD PASS
             #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            torch.cuda.empty_cache()
+            clear_device_cache(accelerator.device)
             
             ### set seed
             if hasattr(model, 'generator'):
@@ -345,7 +361,7 @@ def main(args):
                     seed=seed,
                     )
                 seed_completion += 1
-                torch.cuda.empty_cache()
+                clear_device_cache(accelerator.device)
             except Exception as e:
                 error_msg = f"Error in prediction: {e}{traceback.format_exc()}\n"
                 target_msg = f"N_chains: {input_features['N_chains'].item()}, N_tokens: {input_features['N_tokens'].item()}, N_Atoms: {input_features['N_atoms'].item()}, N_alignments: {input_features['N_alignments'].item()}"
@@ -359,7 +375,7 @@ def main(args):
                 del original_ref_features
                 del input_features
                 gc.collect()
-                torch.cuda.empty_cache()
+                clear_device_cache(accelerator.device)
                 break
             
         if seed_completion == len(seeds):

@@ -15,6 +15,7 @@
 
 from functools import partialmethod, partial
 from typing import Optional, List
+import os
 
 import torch
 import torch.nn as nn
@@ -23,6 +24,13 @@ from intellifold.openfold.model.primitives import Linear, LayerNorm, Attention
 from intellifold.openfold.utils.chunk_utils import chunk_layer
 from intellifold.openfold.utils.tensor_utils import permute_final_dims
 
+mlx_is_installed = False
+if os.getenv("USE_MLX_TRIANGLE_ATTENTION", "false").lower() == "true":
+    try:
+        from intellifold.openfold.utils.kernel.mlx_attention import mlx_triangle_attention
+        mlx_is_installed = True
+    except Exception:
+        mlx_is_installed = False
 
 
 class TriangleAttention(nn.Module):
@@ -60,6 +68,7 @@ class TriangleAttention(nn.Module):
         biases: List[torch.Tensor],
         chunk_size: int,
         use_deepspeed_evo_attention: bool = False,
+        use_mlx_attention: bool = False,
         inplace_safe: bool = False,
     ) -> torch.Tensor:
         "triangle! triangle!"
@@ -73,6 +82,7 @@ class TriangleAttention(nn.Module):
             partial(
                 self.mha, 
                 use_deepspeed_evo_attention=use_deepspeed_evo_attention,
+                use_mlx_attention=use_mlx_attention,
             ),
             mha_inputs,
             chunk_size=chunk_size,
@@ -85,6 +95,7 @@ class TriangleAttention(nn.Module):
         mask: Optional[torch.Tensor] = None,
         chunk_size: Optional[int] = None,
         use_deepspeed_evo_attention: bool = False,
+        use_mlx_triangle_attention: bool = False,
         inplace_safe: bool = False,
     ) -> torch.Tensor:
         """
@@ -119,12 +130,31 @@ class TriangleAttention(nn.Module):
 
         biases = [mask_bias, triangle_bias]
 
+        use_mlx_attention = False
+
+        if not use_mlx_triangle_attention:
+            use_mlx_triangle_attention = os.getenv("USE_MLX_TRIANGLE_ATTENTION", "false").lower() == "true"
+
+        use_mlx_attention = use_mlx_triangle_attention and mlx_is_installed
+
+        if use_mlx_attention and chunk_size is None:
+            q_x = x
+            q, k, v = self.mha._prep_qkv(q_x, q_x, apply_scale=True, apply_transpose=True)
+            x = mlx_triangle_attention(q, k, v, biases)
+            x = self.mha._wrap_up(x, q_x)
+            if(not self.starting):
+                x = x.transpose(-2, -3)
+                if (inplace_safe):
+                    x = x.contiguous()
+            return x
+
         if chunk_size is not None:
             x = self._chunk(
                 x, 
                 biases, 
                 chunk_size, 
                 use_deepspeed_evo_attention=use_deepspeed_evo_attention,
+                use_mlx_attention=use_mlx_attention,
                 inplace_safe=inplace_safe,
             )
         else:
@@ -133,6 +163,7 @@ class TriangleAttention(nn.Module):
                 kv_x=x, 
                 biases=biases, 
                 use_deepspeed_evo_attention=use_deepspeed_evo_attention,
+                use_mlx_attention=use_mlx_attention,
             )
 
         if(not self.starting):

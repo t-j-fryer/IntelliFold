@@ -21,7 +21,7 @@ import torch
 import torch.nn as nn
 
 from intellifold.openfold.model.primitives import Linear, LayerNorm
-from intellifold.openfold.utils.precision_utils import is_fp16_enabled
+from intellifold.openfold.utils.precision_utils import disable_backend_autocast, is_fp16_enabled
 from intellifold.openfold.utils.tensor_utils import permute_final_dims
 
 
@@ -158,7 +158,7 @@ class FusedTriangleMultiplicativeUpdate(BaseTriangleMultiplicativeUpdate):
             b = b / b.std()
 
         if(is_fp16_enabled()):
-            with torch.cuda.amp.autocast(enabled=False):
+            with disable_backend_autocast(z.device):
                 x = self._combine_projections(a.float(), b.float())
         else:
             x = self._combine_projections(a, b)

@@ -24,6 +24,10 @@ if deepspeed_is_installed:
 if ds4s_is_installed:
     from intellifold.openfold.utils.kernel.traceable_evoformer_attn import DS4Sci_EvoformerAttention
 
+mlx_is_installed = importlib.util.find_spec("mlx") is not None
+if mlx_is_installed:
+    from intellifold.openfold.utils.kernel.mlx_attention import mlx_attention
+
 import torch
 import torch.nn as nn
 
@@ -35,6 +39,7 @@ from intellifold.openfold.utils.tensor_utils import (
 import os
 
 fastln_is_installed = os.getenv("LAYERNORM_TYPE", None) == "fast_layernorm"
+use_mlx_evo_attention_env = os.getenv("USE_MLX_EVO_ATTENTION", "false").lower() == "true"
 if fastln_is_installed:
     # LayerNorm is a time bottomneck, so we use a custom implementation.
     from intellifold.openfold.utils.layer_norm.layer_norm import FusedLayerNorm
@@ -244,6 +249,7 @@ class Attention(nn.Module):
         kv_x: torch.Tensor,
         biases: Optional[List[torch.Tensor]] = None,
         use_deepspeed_evo_attention: bool = False,
+        use_mlx_attention: bool = False,
     ) -> torch.Tensor:
         """
         Args:
@@ -255,13 +261,18 @@ class Attention(nn.Module):
                 List of biases that broadcast to [*, H, Q, K]
             use_deepspeed_evo_attention:
                 Whether to use DeepSpeed memory-efficient attention kernel.
+            use_mlx_attention:
+                Whether to use the MLX attention backend (Apple Silicon).
                 If none of the "use_<...>" flags are True, a stock PyTorch
                 implementation is used instead
         Returns
             [*, Q, C_q] attention update
         """
 
-        attn_options = [use_deepspeed_evo_attention]
+        if not use_mlx_attention:
+            use_mlx_attention = use_mlx_evo_attention_env
+
+        attn_options = [use_deepspeed_evo_attention, use_mlx_attention]
         if sum(attn_options) > 1:
             raise ValueError(
                 "Choose at most one alternative attention algorithm"
@@ -271,11 +282,14 @@ class Attention(nn.Module):
             biases = []
         
         use_deepspeed_evo_attention = use_deepspeed_evo_attention and q_x.shape[-2] > 16
+        use_mlx_attention = use_mlx_attention and q_x.device.type in {"mps", "cpu"}
 
         # DeepSpeed attention kernel applies scaling internally
-        q, k, v = self._prep_qkv(q_x, kv_x,
-                                 apply_scale=not use_deepspeed_evo_attention,
-                                 )
+        q, k, v = self._prep_qkv(
+            q_x,
+            kv_x,
+            apply_scale=not use_deepspeed_evo_attention,
+        )
 
         if use_deepspeed_evo_attention:
             if len(biases) > 2:
@@ -284,6 +298,9 @@ class Attention(nn.Module):
                     "provide up to two bias terms"
                 )
             o = _deepspeed_evo_attn(q, k, v, biases)
+        elif use_mlx_attention:
+            o = _mlx_attn(q, k, v, biases)
+            o = o.transpose(-2, -3)
         else:
             o = _attention(q, k, v, biases)
             o = o.transpose(-2, -3)
@@ -291,6 +308,23 @@ class Attention(nn.Module):
         o = self._wrap_up(o, q_x)
 
         return o
+
+
+
+@torch.jit.ignore
+def _mlx_attn(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    biases: List[torch.Tensor],
+):
+    if not mlx_is_installed:
+        raise ValueError(
+            "_mlx_attn requires mlx to be installed. Install it with `pip install mlx`."
+        )
+
+    return mlx_attention(q, k, v, biases)
+
 
 
 

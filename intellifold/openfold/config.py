@@ -7,12 +7,15 @@ import ml_collections as mlc
 def model_config(
     low_prec=False, 
     use_deepspeed_evoformer_attention=False,
+    use_mlx_evo_attention=False,
 ):  
     
     c = copy.deepcopy(config)
     # TRAINING PRESETS
     if use_deepspeed_evoformer_attention:
         c.globals.use_deepspeed_evo_attention = True 
+    if use_mlx_evo_attention:
+        c.globals.use_mlx_evo_attention = True
     if low_prec:
         c.globals.eps = 1e-4
         # c.globals.inf = 1e4
@@ -47,6 +50,7 @@ config = mlc.ConfigDict(
             "chunk_size": chunk_size,
             # Use DeepSpeed memory-efficient attention kernel
             "use_deepspeed_evo_attention": False,
+            "use_mlx_evo_attention": False,
             "c_z": c_z,
             "c_m": c_m,
             "c_t": c_t,
