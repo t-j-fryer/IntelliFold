@@ -68,7 +68,7 @@ class TriangleAttention(nn.Module):
         biases: List[torch.Tensor],
         chunk_size: int,
         use_deepspeed_evo_attention: bool = False,
-        use_mlx_attention: bool = False,
+        use_mlx_triangle_attention: bool = False,
         inplace_safe: bool = False,
     ) -> torch.Tensor:
         "triangle! triangle!"
@@ -130,14 +130,10 @@ class TriangleAttention(nn.Module):
 
         biases = [mask_bias, triangle_bias]
 
-        use_mlx_attention = False
-
         if not use_mlx_triangle_attention:
             use_mlx_triangle_attention = os.getenv("USE_MLX_TRIANGLE_ATTENTION", "false").lower() == "true"
 
-        use_mlx_attention = use_mlx_triangle_attention and mlx_is_installed
-
-        if use_mlx_attention and chunk_size is None:
+        if use_mlx_triangle_attention and mlx_is_installed and chunk_size is None:
             q_x = x
             q, k, v = self.mha._prep_qkv(q_x, q_x, apply_scale=True, apply_transpose=True)
             x = mlx_triangle_attention(q, k, v, biases)

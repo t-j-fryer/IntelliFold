@@ -34,11 +34,7 @@ def autocast_for_device(enabled: bool = True, dtype=torch.float32):
             )
             if device_type == "cpu":
                 return fn(*args, **kwargs)
-            # MPS autocast currently supports only fp16/bf16. If dtype is unsupported
-            # (e.g. float32), disable autocast to avoid runtime warnings/no-op churn.
-            mps_enabled = enabled and dtype in {torch.float16, torch.bfloat16}
-            autocast_enabled = enabled if device_type == "cuda" else mps_enabled
-            with autocast(device_type=device_type, enabled=autocast_enabled, dtype=dtype):
+            with autocast(device_type=device_type, enabled=enabled, dtype=dtype):
                 return fn(*args, **kwargs)
         return wrapped
     return decorator

@@ -168,17 +168,15 @@ def main(args):
      
     # set timeout to 1800000ms, 30 minutes
     precision = args.precision
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() and precision in {"fp16", "bf16"}:
-        logger.warning(
-            "Accelerate does not support fp16/bf16 mixed_precision on MPS; falling back to --precision no."
-        )
-        precision = "no"
+    if precision == "bf16" and hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        logger.warning("MPS backend does not reliably support bf16 for this pipeline; falling back to fp16.")
+        precision = "fp16"
 
     kwargs_handlers = [DistributedDataParallelKwargs(find_unused_parameters=False),
                        InitProcessGroupKwargs(timeout=timedelta(seconds=1800000))]
     accelerator = Accelerator(
         kwargs_handlers=kwargs_handlers, 
-        log_with=None,
+        log_with='wandb', 
         mixed_precision=precision,
         step_scheduler_with_optimizer=False
         )
