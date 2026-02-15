@@ -16,7 +16,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from intellifold.openfold.model.primitives import Linear, LayerNorm
-from intellifold.openfold.utils.precision_utils import is_fp16_enabled
+from intellifold.openfold.utils.precision_utils import disable_backend_autocast, is_fp16_enabled
 from intellifold.openfold.model.pairformer import PairformerStack
 from intellifold.openfold.utils.atom_token_conversion import aggregate_fn
 from intellifold.openfold.utils.tensor_utils import add
@@ -79,7 +79,7 @@ class DistogramHead(nn.Module):
     
     def forward(self, z): 
         if(is_fp16_enabled()):
-            with torch.cuda.amp.autocast(enabled=False):
+            with disable_backend_autocast(z.device):
                 return self._forward(z.float())
         else:
             return self._forward(z)
@@ -108,7 +108,7 @@ class pAEHead(nn.Module):
     
     def forward(self, s):
         if(is_fp16_enabled()):
-            with torch.cuda.amp.autocast(enabled=False):
+            with disable_backend_autocast(s.device):
                 return self._forward(s.float())
         else:
             return self._forward(s)
@@ -138,7 +138,7 @@ class pDEHead(nn.Module):
     
     def forward(self, s):
         if(is_fp16_enabled()):
-            with torch.cuda.amp.autocast(enabled=False):
+            with disable_backend_autocast(s.device):
                 return self._forward(s.float())
         else:
             return self._forward(s)
@@ -169,7 +169,7 @@ class pLDDTHead(nn.Module):
     
     def forward(self, s):
         if(is_fp16_enabled()):
-            with torch.cuda.amp.autocast(enabled=False):
+            with disable_backend_autocast(s.device):
                 return self._forward(s.float())
         else:
             return self._forward(s)
@@ -197,7 +197,7 @@ class ResolvedHead(nn.Module):
     
     def forward(self, s):
         if(is_fp16_enabled()):
-            with torch.cuda.amp.autocast(enabled=False):
+            with disable_backend_autocast(s.device):
                 return self._forward(s.float())
         else:
             return self._forward(s)

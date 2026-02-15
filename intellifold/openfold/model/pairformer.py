@@ -30,7 +30,7 @@ from intellifold.openfold.model.triangular_multiplicative_update import (
 )
 from intellifold.openfold.utils.chunk_utils import chunk_layer, ChunkSizeTuner
 from intellifold.openfold.utils.tensor_utils import add,permute_final_dims,flatten_final_dims
-from intellifold.openfold.model.primitives import Attention,_deepspeed_evo_attn
+from intellifold.openfold.model.primitives import Attention, _deepspeed_evo_attn, _mlx_attn, use_mlx_evo_attention_env
 from intellifold.openfold.utils.atom_token_conversion import pad_at_dim,concat_previous_and_later_windows,slice_at_dim
 
 
@@ -226,6 +226,7 @@ class BiasAttention(nn.Module):
         x: torch.Tensor,
         biases: Optional[List[torch.Tensor]] = None,
         use_deepspeed_evo_attention: bool = False,
+        use_mlx_attention: bool = False,
     ) -> torch.Tensor:
         """
         Args:
@@ -235,8 +236,8 @@ class BiasAttention(nn.Module):
                 List of biases that broadcast to [*, H, Q, K]
             use_deepspeed_evo_attention:
                 Whether to use DeepSpeed's EvoAttention for the attention
-                
-
+            use_mlx_attention:
+                Whether to use MLX attention for the attention.
 
         Returns
             [*, Q, C_v] attention update
@@ -247,7 +248,12 @@ class BiasAttention(nn.Module):
 
         v = self._prep_v(x)
         
+        if not use_mlx_attention:
+            use_mlx_attention = use_mlx_evo_attention_env
+
         use_deepspeed_evo_attention = use_deepspeed_evo_attention and x.shape[-2] > 16
+        use_mlx_attention = use_mlx_attention and x.device.type in {"mps", "cpu"}
+
         if use_deepspeed_evo_attention:
             if len(biases) > 2:
                 raise ValueError(
@@ -255,6 +261,9 @@ class BiasAttention(nn.Module):
                     "provide up to two bias terms"
                 )
             o = _deepspeed_evo_attn(torch.zeros_like(v), torch.zeros_like(v), v, biases)
+        elif use_mlx_attention:
+            o = _mlx_attn(torch.zeros_like(v), torch.zeros_like(v), v, biases)
+            o = o.transpose(-2, -3)
         else:
             o = self._attention(v, biases)
             o = o.transpose(-2, -3)

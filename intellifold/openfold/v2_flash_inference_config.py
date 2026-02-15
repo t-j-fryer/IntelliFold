@@ -29,9 +29,12 @@ def get_model_config(args):
     else:
         use_deepspeed_evoformer_attention = False
     
+    use_mlx_evo_attention = os.environ.get("USE_MLX_EVO_ATTENTION", "false") == "true"
+
     config = model_config(
         low_prec=is_low_precision,
         use_deepspeed_evoformer_attention=use_deepspeed_evoformer_attention,
+        use_mlx_evo_attention=use_mlx_evo_attention,
     )
     config.sample.no_sample_steps_T = args.sampling_steps
     config.backbone.recycling_iters = args.recycling_iters
