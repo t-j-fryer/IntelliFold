@@ -82,6 +82,7 @@ class TriangleAttention(nn.Module):
             partial(
                 self.mha, 
                 use_deepspeed_evo_attention=use_deepspeed_evo_attention,
+                use_mlx_attention=use_mlx_attention,
             ),
             mha_inputs,
             chunk_size=chunk_size,
@@ -149,6 +150,7 @@ class TriangleAttention(nn.Module):
                 biases, 
                 chunk_size, 
                 use_deepspeed_evo_attention=use_deepspeed_evo_attention,
+                use_mlx_attention=use_mlx_attention,
                 inplace_safe=inplace_safe,
             )
         else:
@@ -157,6 +159,7 @@ class TriangleAttention(nn.Module):
                 kv_x=x, 
                 biases=biases, 
                 use_deepspeed_evo_attention=use_deepspeed_evo_attention,
+                use_mlx_attention=use_mlx_attention,
             )
 
         if(not self.starting):
