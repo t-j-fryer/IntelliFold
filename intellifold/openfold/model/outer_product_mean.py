@@ -21,7 +21,7 @@ import torch.nn as nn
 
 from intellifold.openfold.model.primitives import Linear
 from intellifold.openfold.utils.chunk_utils import chunk_layer
-from intellifold.openfold.utils.precision_utils import is_fp16_enabled
+from intellifold.openfold.utils.precision_utils import disable_backend_autocast, is_fp16_enabled
 
 
 class OuterProductMean(nn.Module):
@@ -157,7 +157,7 @@ class OuterProductMean(nn.Module):
                 inplace_safe: bool = False,
     ) -> torch.Tensor:
         if(is_fp16_enabled()):
-            with torch.cuda.amp.autocast(enabled=False):
+            with disable_backend_autocast(m.device):
                 return self._forward(m.float(), mask, chunk_size, inplace_safe)
         else:
             return self._forward(m, mask, chunk_size, inplace_safe)

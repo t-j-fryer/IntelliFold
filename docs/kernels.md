@@ -1,5 +1,16 @@
 ### Setting up kernels
 
+- **MLX attention backend (Apple Silicon)** can be enabled to run Evoformer attention through MLX instead of the default PyTorch attention path. To use this feature, run:
+  ```bash
+  pip install mlx
+  export USE_MLX_EVO_ATTENTION=true
+  ```
+  This backend is intended for macOS Apple Silicon and is useful when running with the `mps` device.
+  You can also enable a dedicated MLX triangle-attention wrapper (cuEquivariance-style mask handling) with:
+  ```bash
+  export USE_MLX_TRIANGLE_ATTENTION=true
+  ```
+
 - **Custom CUDA layernorm kernels** modified from [FastFold](https://github.com/hpcaitech/FastFold) and [Oneflow](https://github.com/Oneflow-Inc/oneflow) accelerate about 30%-50% during different training stages. To use this feature, run the following command:
   ```bash
   export LAYERNORM_TYPE=fast_layernorm
