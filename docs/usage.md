@@ -47,7 +47,6 @@ Common arguments of this `scripts`/`intellifold predict` are explained as follow
 * `--precision` (`str`, default: `bf16`)  
   Sets precision, lower precision improves runtime.
   > On Apple Silicon (`mps`), prefer `--precision fp16`.
-  > For experimental MLX attention backends on Apple Silicon, set `USE_MLX_EVO_ATTENTION=true` (and optionally `USE_MLX_TRIANGLE_ATTENTION=true`).
 * `--seed` (`INTEGER`, default: `42`)  
   Random seed (single int or multiple ints separated by comma, e.g., '42' or '42,43').
 * `--recycling_iters` (`INTEGER`, default: `10`)  
