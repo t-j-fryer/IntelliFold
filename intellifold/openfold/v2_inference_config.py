@@ -7,12 +7,15 @@ import os
 def model_config(
     low_prec=False, 
     use_deepspeed_evoformer_attention=False,
+    use_mlx_evo_attention=False,
 ):  
     
     c = copy.deepcopy(config)
     # TRAINING PRESETS
     if use_deepspeed_evoformer_attention:
         c.globals.use_deepspeed_evo_attention = True 
+    if use_mlx_evo_attention:
+        c.globals.use_mlx_evo_attention = True
     if low_prec:
         c.globals.eps = 1e-4
         # c.globals.inf = 1e4
@@ -43,9 +46,12 @@ def get_model_config(args):
     else:
         use_deepspeed_evoformer_attention = False
     
+    use_mlx_evo_attention = os.environ.get("USE_MLX_EVO_ATTENTION", "false") == "true"
+
     config = model_config(
         low_prec=is_low_precision,
         use_deepspeed_evoformer_attention=use_deepspeed_evoformer_attention,
+        use_mlx_evo_attention=use_mlx_evo_attention,
     )
     config.sample.no_sample_steps_T = args.sampling_steps
     config.backbone.recycling_iters = args.recycling_iters
@@ -95,6 +101,7 @@ config = mlc.ConfigDict(
             "chunk_size": chunk_size,
             # Use DeepSpeed memory-efficient attention kernel
             "use_deepspeed_evo_attention": False,
+            "use_mlx_evo_attention": False,
             "c_z": c_z,
             "no_heads_pair": no_heads_pair,
             "c_m": c_m,
